@@ -13,6 +13,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Arrays;
+import java.util.List;
+
 import static io.hhplus.tdd.PointException.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.BDDMockito.given;
@@ -319,7 +322,7 @@ public class PointServiceTest {
 
     @Test
     @DisplayName("포인트 사용시 유저 ID가 '0'일시 예외 발생")
-    void test17() {
+    void test16() {
         //given
         long userId = 0L;
         long usePoints = 1000L;
@@ -334,7 +337,7 @@ public class PointServiceTest {
 
     @Test
     @DisplayName("포인트 사용시 유저 ID가 음수일시 예외 발생")
-    void test18() {
+    void test17() {
         //given
         long userId = -1L;
         long chargePoints = 100L;
@@ -348,7 +351,7 @@ public class PointServiceTest {
 
     @Test
     @DisplayName("포인트 충전시 존재하지 않는 사용자 예외 발생")
-    void test19(){
+    void test18(){
         //given
         long userId = 1L;
         long chargePoints = 100L;
@@ -364,7 +367,7 @@ public class PointServiceTest {
 
     @Test
     @DisplayName("포인트가 '0'일시 예외 발생")
-    void test20(){
+    void test19(){
         //given
         long userId = 1L;
         long usePoints = 0L;
@@ -380,7 +383,7 @@ public class PointServiceTest {
 
     @Test
     @DisplayName("포인트가 음수일시 예외 발생")
-    void test21(){
+    void test20(){
         //given
         long userId = 1L;
         long usePoints = -100L;
@@ -396,7 +399,7 @@ public class PointServiceTest {
 
     @Test
     @DisplayName("포인트가 최소충전포인트(10p) 이하 예외 발생")
-    void test22(){
+    void test21(){
         //given
         long userId = 1L;
         long usePoints = 5L;
@@ -412,7 +415,7 @@ public class PointServiceTest {
 
     @Test
     @DisplayName("사용 포인트를 반영했을 때 최소 보유 포인트 이하일시(0P) 예외 발생")
-    void test23(){
+    void test22(){
         //given
         long userId = 1L;
         long usePoints = 200L;
@@ -425,6 +428,137 @@ public class PointServiceTest {
 
         assertEquals( "잔여 포인트가 부족합니다. 현재 잔액 " + currentPoints + "P", exception.getMessage());
         log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("특정 유저의 포인트 히스토리를 조회")
+    void test23(){
+        //given
+        long userId = 1L;
+        List<PointHistory> userPointHistory = Arrays.asList(
+                new PointHistory(1L, 1L, 100L, TransactionType.CHARGE, 100L),
+                new PointHistory(2L, 1L, 100L, TransactionType.CHARGE, 100L),
+                new PointHistory(3L, 1L, 100L, TransactionType.CHARGE, 100L),
+                new PointHistory(4L, 1L, 100L, TransactionType.USE, 100L),
+                new PointHistory(5L, 1L, 100L, TransactionType.USE, 100L)
+        );
+        given(userPointTable.selectById(userId)).willReturn(new UserPoint(1L, 100L, 100L));
+        given(pointHistoryTable.selectAllByUserId(userId)).willReturn(userPointHistory);
+
+        //when
+        List<PointHistory> expectedList = pointService.getUserPointHistory(userId);
+
+        //then
+        assertEquals(expectedList, userPointHistory);
+    }
+
+    @Test
+    @DisplayName("특정 유저의 포인트 히스토리가 없을시 빈 배열 반환")
+    void test24(){
+        //given
+        long userId = 1L;
+        given(userPointTable.selectById(userId)).willReturn(new UserPoint(1L, 100L, 100L));
+        given(pointHistoryTable.selectAllByUserId(userId)).willReturn(List.of());
+
+        //when
+        List<PointHistory> expectedList = pointService.getUserPointHistory(userId);
+        //then
+        assertTrue(expectedList.isEmpty(), "해당 유저의 히스토리는 비어있습니다.");
+    }
+
+    @Test
+    @DisplayName("특정 유저 ID가 '0' 경우 예외 반환")
+    void test25(){
+        //given
+        long userId = 0L;
+        //when
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> pointService.getUserPointHistory(userId));
+        //then
+        assertEquals( "해당 유저 아이디가 올바르지 않습니다: " + userId, exception.getMessage());
+        log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("특정 유저 ID가 음수일 경우 예외 반환")
+    void test26(){
+        //given
+        long userId = -1L;
+        //when
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> pointService.getUserPointHistory(userId));
+        //then
+        assertEquals( "해당 유저 아이디가 올바르지 않습니다: " + userId, exception.getMessage());
+        log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("특정 유저가 존재하지 않을 경우 예외 반환")
+    void test27(){
+        //given
+        long userId = 1L;
+        given(userPointTable.selectById(userId)).willReturn(null);
+
+        //when
+        UserNotFoundException exception = assertThrows(UserNotFoundException.class,
+                () -> pointService.getUserPointHistory(userId));
+        //then
+        assertEquals( "해당 유저를 찾을 수 없습니다: " + userId, exception.getMessage());
+        log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("포인트 충전 후 포인트 히스토리에 등록")
+    void test28(){
+        //given
+        long userId = 1L;
+        long currentPoints = 200L;
+        long chargePoints = 200L;
+        long expectedPoints = currentPoints + chargePoints;
+
+        given(userPointTable.selectById(userId))
+                .willReturn(new UserPoint(userId, currentPoints, 1000L));
+
+        given(userPointTable.insertOrUpdate(userId, expectedPoints))
+                .willReturn(new UserPoint(userId, expectedPoints, 1000L));
+
+        given(pointHistoryTable.insert(userId, chargePoints, TransactionType.CHARGE, 1000L))
+                .willReturn(new PointHistory(1, userId, chargePoints, TransactionType.CHARGE, 1000L));
+
+        // when
+        UserPoint userPoint = pointService.charge(userId, chargePoints);
+
+        //then
+        assertEquals(400L, userPoint.point());
+        verify(pointHistoryTable, times(1))
+                .insert(userId, chargePoints, TransactionType.CHARGE, 1000L);
+    }
+
+    @Test
+    @DisplayName("포인트 사용 후 포인트 히스토리에 등록")
+    void test29(){
+        //given
+        long userId = 1L;
+        long currentPoints = 800L;
+        long usePoints = 200L;
+        long expectedPoints = currentPoints - usePoints;
+
+        given(userPointTable.selectById(userId))
+                .willReturn(new UserPoint(userId, currentPoints, 1000L));
+
+        given(userPointTable.insertOrUpdate(userId, expectedPoints))
+                .willReturn(new UserPoint(userId, expectedPoints, 1000L));
+
+        given(pointHistoryTable.insert(userId, usePoints, TransactionType.USE, 1000L))
+                .willReturn(new PointHistory(1, userId, usePoints, TransactionType.USE, 1000L));
+
+        // when
+        UserPoint userPoint = pointService.use(userId, usePoints);
+
+        //then
+        assertEquals(expectedPoints, userPoint.point());
+        verify(pointHistoryTable, times(1))
+                .insert(userId, usePoints, TransactionType.USE, 1000L);
     }
 }
 
