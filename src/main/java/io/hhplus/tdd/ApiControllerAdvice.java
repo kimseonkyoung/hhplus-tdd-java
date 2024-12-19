@@ -1,7 +1,8 @@
 package io.hhplus.tdd;
 
-import io.hhplus.tdd.ChargePointException.InsufficientChargePointsException;
-import io.hhplus.tdd.ChargePointException.MaximumChargePointsExceededException;
+import io.hhplus.tdd.PointException.InsufficientChargePointsException;
+import io.hhplus.tdd.PointException.InsufficientUsePointsException;
+import io.hhplus.tdd.PointException.MaximumChargePointsExceededException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -30,6 +31,11 @@ class ApiControllerAdvice extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(value = MaximumChargePointsExceededException.class)
     public ResponseEntity<ErrorResponse> MaximumChargePointsExceededHandleException(Exception e) {
+        return ResponseEntity.status(400).body(new ErrorResponse("400", e.getMessage()));
+    }
+
+    @ExceptionHandler(value = InsufficientUsePointsException.class)
+    public ResponseEntity<ErrorResponse> InsufficientUsePointsHandleException(Exception e) {
         return ResponseEntity.status(400).body(new ErrorResponse("400", e.getMessage()));
     }
 }
