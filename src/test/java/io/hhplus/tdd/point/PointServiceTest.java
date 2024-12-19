@@ -1,7 +1,8 @@
 package io.hhplus.tdd.point;
 
-import io.hhplus.tdd.ChargePointException;
+
 import io.hhplus.tdd.UserNotFoundException;
+import io.hhplus.tdd.database.PointHistoryTable;
 import io.hhplus.tdd.database.UserPointTable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,11 +13,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static io.hhplus.tdd.ChargePointException.*;
+import static io.hhplus.tdd.PointException.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)  // Mockito 확장을 활성화
 public class PointServiceTest {
@@ -26,6 +28,9 @@ public class PointServiceTest {
 
     @Mock
     private UserPointTable userPointTable;  // Mock 객체 생성
+
+    @Mock
+    private PointHistoryTable pointHistoryTable;  // Mock 객체 생성
 
     @InjectMocks
     private PointService pointService;  // 의존성 주입 자동 처리
@@ -96,15 +101,16 @@ public class PointServiceTest {
     void test5(){
         //given
         long userId = 1L;
+        long currentPoints = 100L;
         long chargePoints = 100L;
         given(userPointTable.selectById(userId))
-                .willReturn(new UserPoint(userId, chargePoints, 1000L));
-        given(userPointTable.insertOrUpdate(userId, chargePoints))
-                .willReturn(new UserPoint(userId, chargePoints, 1000L));
+                .willReturn(new UserPoint(userId, currentPoints, 1000L));
+        given(userPointTable.insertOrUpdate(userId, currentPoints + chargePoints))
+                .willReturn(new UserPoint(userId, currentPoints + chargePoints, 1000L));
         //when
         UserPoint userPoints = pointService.charge(userId, chargePoints);
 
-        assertEquals(100L, userPoints.point());
+        assertEquals(200L, userPoints.point());
         log.info("Success message: = 유저 포인트 [{}]", userPoints.point());
     }
 
@@ -113,18 +119,21 @@ public class PointServiceTest {
     void test6(){
         //given
         long userId = 1L;
+        long currentPoints = 100L;
         long firstChargePoints = 100L;
         long secondChargePoints = 200L;
         // Mock 설정 - 각각의 충전 결과 반환
         given(userPointTable.selectById(userId))
-                .willReturn(new UserPoint(userId, firstChargePoints, 100L));
-        given(userPointTable.insertOrUpdate(userId, firstChargePoints))
-                .willReturn(new UserPoint(userId, firstChargePoints, 100L));
+                .willReturn(
+                        new UserPoint(userId, currentPoints, 100L),
+                        new UserPoint(userId, currentPoints + firstChargePoints, 100L)
+                );
 
-        given(userPointTable.selectById(userId))
-                .willReturn(new UserPoint(userId, secondChargePoints, 100L));
-        given(userPointTable.insertOrUpdate(userId, secondChargePoints))
-                .willReturn(new UserPoint(userId, secondChargePoints, 300L));
+        given(userPointTable.insertOrUpdate(userId, currentPoints + firstChargePoints))
+                .willReturn(new UserPoint(userId, currentPoints + firstChargePoints, 100L));
+
+        given(userPointTable.insertOrUpdate(userId, currentPoints + firstChargePoints + secondChargePoints))
+                .willReturn(new UserPoint(userId, currentPoints + firstChargePoints + secondChargePoints, 300L));
 
         //when
         UserPoint firstGetUserPoints = pointService.charge(userId, firstChargePoints);
@@ -132,19 +141,19 @@ public class PointServiceTest {
         //when
         UserPoint secondGetUserPoints = pointService.charge(userId, secondChargePoints);
 
-        assertEquals(100L, firstGetUserPoints.point());
-        assertEquals(200L, secondGetUserPoints.point());
+        assertEquals(200L, firstGetUserPoints.point());
+        assertEquals(400L, secondGetUserPoints.point());
 
         // Verify - 호출 횟수 검증 (BDD Mockito 방식)
-        then(userPointTable).should(times(1)).insertOrUpdate(userId, firstChargePoints);
-        then(userPointTable).should(times(1)).insertOrUpdate(userId, secondChargePoints);
+        then(userPointTable).should(times(1)).insertOrUpdate(userId, currentPoints + firstChargePoints);
+        then(userPointTable).should(times(1)).insertOrUpdate(userId, currentPoints + firstChargePoints + secondChargePoints);
 
         log.info("Success message: = 유저 포인트 [{}]", firstGetUserPoints.point());
         log.info("Success message: = 유저 포인트 [{}]", secondGetUserPoints.point());
     }
 
     @Test
-    @DisplayName("포인트 충전할 때 사용자 ID가 '0'일시 예외 발생")
+    @DisplayName("포인트 충전시 사용자 ID가 '0'일시 예외 발생")
     void test7() {
         //given
         long userId = 0L;
@@ -159,7 +168,7 @@ public class PointServiceTest {
     }
 
     @Test
-    @DisplayName("사용자 ID가 음수일시 예외 발생")
+    @DisplayName("포인트 충전시 사용자 ID가 음수일시 예외 발생")
     void test8() {
         //given
         long userId = -1L;
@@ -232,7 +241,7 @@ public class PointServiceTest {
         InsufficientChargePointsException exception = assertThrows(InsufficientChargePointsException.class,
                 () -> pointService.charge(userId, chargePoints));
 
-        assertEquals( "최소 충전 포인트 " + 10L + "이상의 금액을 충전해야합니다.", exception.getMessage());
+        assertEquals( "최소 충전 10이상의 포인트를 충전해야합니다.", exception.getMessage());
         log.info("Exception message: = [{}]", exception.getMessage());
     }
 
@@ -250,6 +259,171 @@ public class PointServiceTest {
                 () -> pointService.charge(userId, chargePoints));
 
         assertEquals( "최대 보유 가능 " + 1000L + "포인트를 넘었습니다.", exception.getMessage());
+        log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("특정 사용자 포인트 사용 성공")
+    void test14(){
+        //given
+        long userId = 1L;
+        long usePoints = 100L;
+        given(userPointTable.selectById(userId))
+                .willReturn(new UserPoint(userId, 200L, 1000L));
+        given(userPointTable.insertOrUpdate(userId, usePoints))
+                .willReturn(new UserPoint(userId, usePoints, 1000L));
+        //when
+        UserPoint userPoints = pointService.use(userId, usePoints);
+
+        assertEquals(100L, userPoints.point());
+        log.info("Success message: = 유저 포인트 [{}]", userPoints.point());
+    }
+
+    @Test
+    @DisplayName("특정 사용자 포인트 연속 두 번 사용 성공")
+    void test15(){
+        //given
+        long userId = 1L;
+        long currentPoints = 500L;
+        long firstUsePoints = 100L;
+        long secondUsePoints = 100L;
+
+        // Mock 설정 - 각각의 사용 결과 반환
+        given(userPointTable.selectById(userId))
+                .willReturn(
+                        new UserPoint(userId, currentPoints, 300L),
+                        new UserPoint(userId, currentPoints- firstUsePoints, 300L)
+        );
+
+        given(userPointTable.insertOrUpdate(userId, currentPoints - firstUsePoints))
+                .willReturn(new UserPoint(userId, currentPoints - firstUsePoints, 100L));
+
+        given(userPointTable.insertOrUpdate(userId, currentPoints - firstUsePoints - secondUsePoints))
+                .willReturn(new UserPoint(userId, currentPoints - firstUsePoints - secondUsePoints, 300L));
+
+
+        //when
+        UserPoint firstGetUserPoints = pointService.use(userId, firstUsePoints);
+        UserPoint secondGetUserPoints = pointService.use(userId, secondUsePoints);
+
+        assertEquals(400L, firstGetUserPoints.point());
+        assertEquals(300L, secondGetUserPoints.point());
+
+        // Verify - 호출 횟수 검증 (BDD Mockito 방식)
+        then(userPointTable).should(times(1)).insertOrUpdate(userId, 400L);  // 첫 번째 사용 후 포인트
+        then(userPointTable).should(times(1)).insertOrUpdate(userId, 300L);  // 두 번째 사용 후 포인트
+
+        log.info("Success message: = 유저 포인트 [{}]", firstGetUserPoints.point());
+        log.info("Success message: = 유저 포인트 [{}]", secondGetUserPoints.point());
+    }
+
+    @Test
+    @DisplayName("포인트 사용시 유저 ID가 '0'일시 예외 발생")
+    void test17() {
+        //given
+        long userId = 0L;
+        long usePoints = 1000L;
+
+        // When & Then
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> pointService.use(userId, usePoints));
+
+        assertEquals( "해당 유저 아이디가 올바르지 않습니다: " + userId, exception.getMessage());
+        log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("포인트 사용시 유저 ID가 음수일시 예외 발생")
+    void test18() {
+        //given
+        long userId = -1L;
+        long chargePoints = 100L;
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> pointService.use(userId, chargePoints));
+
+        assertEquals( "해당 유저 아이디가 올바르지 않습니다: " + userId, exception.getMessage());
+        log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("포인트 충전시 존재하지 않는 사용자 예외 발생")
+    void test19(){
+        //given
+        long userId = 1L;
+        long chargePoints = 100L;
+        given(userPointTable.selectById(userId)).willReturn(null);
+
+        //when & then
+        UserNotFoundException exception = assertThrows(UserNotFoundException.class,
+                () -> pointService.charge(userId, chargePoints));
+
+        assertEquals( "해당 유저를 찾을 수 없습니다: " + userId, exception.getMessage());
+        log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("포인트가 '0'일시 예외 발생")
+    void test20(){
+        //given
+        long userId = 1L;
+        long usePoints = 0L;
+        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, usePoints, 1000L));
+
+        //when & then
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> pointService.use(userId, usePoints));
+
+        assertEquals( "해당 사용 포인트가 올바르지 않습니다: " + usePoints, exception.getMessage());
+        log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("포인트가 음수일시 예외 발생")
+    void test21(){
+        //given
+        long userId = 1L;
+        long usePoints = -100L;
+        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, usePoints, 1000L));
+
+        //when & then
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> pointService.use(userId, usePoints));
+
+        assertEquals( "해당 사용 포인트가 올바르지 않습니다: " + usePoints, exception.getMessage());
+        log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("포인트가 최소충전포인트(10p) 이하 예외 발생")
+    void test22(){
+        //given
+        long userId = 1L;
+        long usePoints = 5L;
+        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, usePoints, 1000L));
+
+        //when & then
+        InsufficientUsePointsException exception = assertThrows(InsufficientUsePointsException.class,
+                () -> pointService.use(userId, usePoints));
+
+        assertEquals( "최소 " + 10 + "이상의 포인트를 사용해야합니다.", exception.getMessage());
+        log.info("Exception message: = [{}]", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("사용 포인트를 반영했을 때 최소 보유 포인트 이하일시(0P) 예외 발생")
+    void test23(){
+        //given
+        long userId = 1L;
+        long usePoints = 200L;
+        long currentPoints = 100L;
+        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, currentPoints, 1000L));
+
+        //when & then
+        InsufficientBalanceException exception = assertThrows(InsufficientBalanceException.class,
+                () -> pointService.use(userId, usePoints));
+
+        assertEquals( "잔여 포인트가 부족합니다. 현재 잔액 " + currentPoints + "P", exception.getMessage());
         log.info("Exception message: = [{}]", exception.getMessage());
     }
 }
