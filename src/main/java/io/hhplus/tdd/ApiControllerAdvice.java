@@ -12,9 +12,14 @@ class ApiControllerAdvice extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(500).body(new ErrorResponse("500", "에러가 발생했습니다."));
     }
 
+    @ExceptionHandler(value = IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgumentException(Exception e) {
+        return ResponseEntity.status(400).body(new ErrorResponse("400", e.getMessage()));
+    }
+
     @ExceptionHandler(value = UserNotFoundException.class)
     public ResponseEntity<ErrorResponse> userNotFoundHandleException(Exception e) {
-        return ResponseEntity.status(404).body(new ErrorResponse("404", e.getMessage()));
+        return ResponseEntity.status(400).body(new ErrorResponse("400", e.getMessage()));
     }
 
 
