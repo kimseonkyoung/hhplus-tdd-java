@@ -12,28 +12,32 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static io.hhplus.tdd.PointException.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)  // Mockito 확장을 활성화
 public class PointServiceTest {
 
     private static final Logger log = LoggerFactory.getLogger(PointServiceTest.class);
 
+    @Mock
+    private UserPointTable mockUserPointTable;  // Mock 객체 생성
 
     @Mock
-    private UserPointTable userPointTable;  // Mock 객체 생성
-
-    @Mock
-    private PointHistoryTable pointHistoryTable;  // Mock 객체 생성
+    private PointHistoryTable mockPointHistoryTable;  // Mock 객체 생성
 
     @InjectMocks
     private PointService pointService;  // 의존성 주입 자동 처리
@@ -45,7 +49,7 @@ public class PointServiceTest {
         long userId = 1L;
         long initialPoints = 1_000L;
         long initialMillis = 1_000L;
-        given(userPointTable.selectById(userId))
+        given(mockUserPointTable.selectById(userId))
                 .willReturn(new UserPoint(userId, initialPoints, initialMillis));
 
         // when
@@ -54,7 +58,6 @@ public class PointServiceTest {
         // then
         assertEquals(initialPoints, userPoints.point());
         log.info("Success message: = 유저 포인트 [{}]", userPoints.point());
-
     }
 
     @Test
@@ -62,7 +65,7 @@ public class PointServiceTest {
     void test2() {
         //given
         long userId = 1L;
-        given(userPointTable.selectById(userId)).willReturn(null);
+        given(mockUserPointTable.selectById(userId)).willReturn(null);
 
         // When & Then
         UserNotFoundException exception = assertThrows(UserNotFoundException.class,
@@ -106,9 +109,9 @@ public class PointServiceTest {
         long userId = 1L;
         long currentPoints = 100L;
         long chargePoints = 100L;
-        given(userPointTable.selectById(userId))
+        given(mockUserPointTable.selectById(userId))
                 .willReturn(new UserPoint(userId, currentPoints, 1000L));
-        given(userPointTable.insertOrUpdate(userId, currentPoints + chargePoints))
+        given(mockUserPointTable.insertOrUpdate(userId, currentPoints + chargePoints))
                 .willReturn(new UserPoint(userId, currentPoints + chargePoints, 1000L));
         //when
         UserPoint userPoints = pointService.charge(userId, chargePoints);
@@ -126,16 +129,16 @@ public class PointServiceTest {
         long firstChargePoints = 100L;
         long secondChargePoints = 200L;
         // Mock 설정 - 각각의 충전 결과 반환
-        given(userPointTable.selectById(userId))
+        given(mockUserPointTable.selectById(userId))
                 .willReturn(
                         new UserPoint(userId, currentPoints, 100L),
                         new UserPoint(userId, currentPoints + firstChargePoints, 100L)
                 );
 
-        given(userPointTable.insertOrUpdate(userId, currentPoints + firstChargePoints))
+        given(mockUserPointTable.insertOrUpdate(userId, currentPoints + firstChargePoints))
                 .willReturn(new UserPoint(userId, currentPoints + firstChargePoints, 100L));
 
-        given(userPointTable.insertOrUpdate(userId, currentPoints + firstChargePoints + secondChargePoints))
+        given(mockUserPointTable.insertOrUpdate(userId, currentPoints + firstChargePoints + secondChargePoints))
                 .willReturn(new UserPoint(userId, currentPoints + firstChargePoints + secondChargePoints, 300L));
 
         //when
@@ -148,8 +151,8 @@ public class PointServiceTest {
         assertEquals(400L, secondGetUserPoints.point());
 
         // Verify - 호출 횟수 검증 (BDD Mockito 방식)
-        then(userPointTable).should(times(1)).insertOrUpdate(userId, currentPoints + firstChargePoints);
-        then(userPointTable).should(times(1)).insertOrUpdate(userId, currentPoints + firstChargePoints + secondChargePoints);
+        then(mockUserPointTable).should(times(1)).insertOrUpdate(userId, currentPoints + firstChargePoints);
+        then(mockUserPointTable).should(times(1)).insertOrUpdate(userId, currentPoints + firstChargePoints + secondChargePoints);
 
         log.info("Success message: = 유저 포인트 [{}]", firstGetUserPoints.point());
         log.info("Success message: = 유저 포인트 [{}]", secondGetUserPoints.point());
@@ -190,7 +193,7 @@ public class PointServiceTest {
         //given
         long userId = 1L;
         long chargePoints = 100L;
-        given(userPointTable.selectById(userId)).willReturn(null);
+        given(mockUserPointTable.selectById(userId)).willReturn(null);
 
         //when & then
         UserNotFoundException exception = assertThrows(UserNotFoundException.class,
@@ -206,7 +209,7 @@ public class PointServiceTest {
         //given
         long userId = 1L;
         long chargePoints = 0L;
-        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, chargePoints, 1000L));
+        given(mockUserPointTable.selectById(userId)).willReturn(new UserPoint(userId, chargePoints, 1000L));
 
         //when & then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -222,7 +225,7 @@ public class PointServiceTest {
         //given
         long userId = 1L;
         long chargePoints = -100L;
-        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, chargePoints, 1000L));
+        given(mockUserPointTable.selectById(userId)).willReturn(new UserPoint(userId, chargePoints, 1000L));
 
         //when & then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -238,7 +241,7 @@ public class PointServiceTest {
         //given
         long userId = 1L;
         long chargePoints = 5L;
-        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, chargePoints, 1000L));
+        given(mockUserPointTable.selectById(userId)).willReturn(new UserPoint(userId, chargePoints, 1000L));
 
         //when & then
         InsufficientChargePointsException exception = assertThrows(InsufficientChargePointsException.class,
@@ -255,7 +258,7 @@ public class PointServiceTest {
         long userId = 1L;
         long chargePoints = 200L;
         long currentPoints = 900L;
-        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, currentPoints, 1000L));
+        given(mockUserPointTable.selectById(userId)).willReturn(new UserPoint(userId, currentPoints, 1000L));
 
         //when & then
         MaximumChargePointsExceededException exception = assertThrows(MaximumChargePointsExceededException.class,
@@ -271,9 +274,9 @@ public class PointServiceTest {
         //given
         long userId = 1L;
         long usePoints = 100L;
-        given(userPointTable.selectById(userId))
+        given(mockUserPointTable.selectById(userId))
                 .willReturn(new UserPoint(userId, 200L, 1000L));
-        given(userPointTable.insertOrUpdate(userId, usePoints))
+        given(mockUserPointTable.insertOrUpdate(userId, usePoints))
                 .willReturn(new UserPoint(userId, usePoints, 1000L));
         //when
         UserPoint userPoints = pointService.use(userId, usePoints);
@@ -292,16 +295,16 @@ public class PointServiceTest {
         long secondUsePoints = 100L;
 
         // Mock 설정 - 각각의 사용 결과 반환
-        given(userPointTable.selectById(userId))
+        given(mockUserPointTable.selectById(userId))
                 .willReturn(
                         new UserPoint(userId, currentPoints, 300L),
                         new UserPoint(userId, currentPoints- firstUsePoints, 300L)
         );
 
-        given(userPointTable.insertOrUpdate(userId, currentPoints - firstUsePoints))
+        given(mockUserPointTable.insertOrUpdate(userId, currentPoints - firstUsePoints))
                 .willReturn(new UserPoint(userId, currentPoints - firstUsePoints, 100L));
 
-        given(userPointTable.insertOrUpdate(userId, currentPoints - firstUsePoints - secondUsePoints))
+        given(mockUserPointTable.insertOrUpdate(userId, currentPoints - firstUsePoints - secondUsePoints))
                 .willReturn(new UserPoint(userId, currentPoints - firstUsePoints - secondUsePoints, 300L));
 
 
@@ -313,8 +316,8 @@ public class PointServiceTest {
         assertEquals(300L, secondGetUserPoints.point());
 
         // Verify - 호출 횟수 검증 (BDD Mockito 방식)
-        then(userPointTable).should(times(1)).insertOrUpdate(userId, 400L);  // 첫 번째 사용 후 포인트
-        then(userPointTable).should(times(1)).insertOrUpdate(userId, 300L);  // 두 번째 사용 후 포인트
+        then(mockUserPointTable).should(times(1)).insertOrUpdate(userId, 400L);  // 첫 번째 사용 후 포인트
+        then(mockUserPointTable).should(times(1)).insertOrUpdate(userId, 300L);  // 두 번째 사용 후 포인트
 
         log.info("Success message: = 유저 포인트 [{}]", firstGetUserPoints.point());
         log.info("Success message: = 유저 포인트 [{}]", secondGetUserPoints.point());
@@ -355,7 +358,7 @@ public class PointServiceTest {
         //given
         long userId = 1L;
         long chargePoints = 100L;
-        given(userPointTable.selectById(userId)).willReturn(null);
+        given(mockUserPointTable.selectById(userId)).willReturn(null);
 
         //when & then
         UserNotFoundException exception = assertThrows(UserNotFoundException.class,
@@ -371,7 +374,7 @@ public class PointServiceTest {
         //given
         long userId = 1L;
         long usePoints = 0L;
-        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, usePoints, 1000L));
+        given(mockUserPointTable.selectById(userId)).willReturn(new UserPoint(userId, usePoints, 1000L));
 
         //when & then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -387,7 +390,7 @@ public class PointServiceTest {
         //given
         long userId = 1L;
         long usePoints = -100L;
-        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, usePoints, 1000L));
+        given(mockUserPointTable.selectById(userId)).willReturn(new UserPoint(userId, usePoints, 1000L));
 
         //when & then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -403,7 +406,7 @@ public class PointServiceTest {
         //given
         long userId = 1L;
         long usePoints = 5L;
-        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, usePoints, 1000L));
+        given(mockUserPointTable.selectById(userId)).willReturn(new UserPoint(userId, usePoints, 1000L));
 
         //when & then
         InsufficientUsePointsException exception = assertThrows(InsufficientUsePointsException.class,
@@ -420,7 +423,7 @@ public class PointServiceTest {
         long userId = 1L;
         long usePoints = 200L;
         long currentPoints = 100L;
-        given(userPointTable.selectById(userId)).willReturn(new UserPoint(userId, currentPoints, 1000L));
+        given(mockUserPointTable.selectById(userId)).willReturn(new UserPoint(userId, currentPoints, 1000L));
 
         //when & then
         InsufficientBalanceException exception = assertThrows(InsufficientBalanceException.class,
@@ -442,8 +445,8 @@ public class PointServiceTest {
                 new PointHistory(4L, 1L, 100L, TransactionType.USE, 100L),
                 new PointHistory(5L, 1L, 100L, TransactionType.USE, 100L)
         );
-        given(userPointTable.selectById(userId)).willReturn(new UserPoint(1L, 100L, 100L));
-        given(pointHistoryTable.selectAllByUserId(userId)).willReturn(userPointHistory);
+        given(mockUserPointTable.selectById(userId)).willReturn(new UserPoint(1L, 100L, 100L));
+        given(mockPointHistoryTable.selectAllByUserId(userId)).willReturn(userPointHistory);
 
         //when
         List<PointHistory> expectedList = pointService.getUserPointHistory(userId);
@@ -457,8 +460,8 @@ public class PointServiceTest {
     void test24(){
         //given
         long userId = 1L;
-        given(userPointTable.selectById(userId)).willReturn(new UserPoint(1L, 100L, 100L));
-        given(pointHistoryTable.selectAllByUserId(userId)).willReturn(List.of());
+        given(mockUserPointTable.selectById(userId)).willReturn(new UserPoint(1L, 100L, 100L));
+        given(mockPointHistoryTable.selectAllByUserId(userId)).willReturn(List.of());
 
         //when
         List<PointHistory> expectedList = pointService.getUserPointHistory(userId);
@@ -497,7 +500,7 @@ public class PointServiceTest {
     void test27(){
         //given
         long userId = 1L;
-        given(userPointTable.selectById(userId)).willReturn(null);
+        given(mockUserPointTable.selectById(userId)).willReturn(null);
 
         //when
         UserNotFoundException exception = assertThrows(UserNotFoundException.class,
@@ -516,13 +519,13 @@ public class PointServiceTest {
         long chargePoints = 200L;
         long expectedPoints = currentPoints + chargePoints;
 
-        given(userPointTable.selectById(userId))
+        given(mockUserPointTable.selectById(userId))
                 .willReturn(new UserPoint(userId, currentPoints, 1000L));
 
-        given(userPointTable.insertOrUpdate(userId, expectedPoints))
+        given(mockUserPointTable.insertOrUpdate(userId, expectedPoints))
                 .willReturn(new UserPoint(userId, expectedPoints, 1000L));
 
-        given(pointHistoryTable.insert(userId, chargePoints, TransactionType.CHARGE, 1000L))
+        given(mockPointHistoryTable.insert(userId, chargePoints, TransactionType.CHARGE, 1000L))
                 .willReturn(new PointHistory(1, userId, chargePoints, TransactionType.CHARGE, 1000L));
 
         // when
@@ -530,7 +533,7 @@ public class PointServiceTest {
 
         //then
         assertEquals(400L, userPoint.point());
-        verify(pointHistoryTable, times(1))
+        verify(mockPointHistoryTable, times(1))
                 .insert(userId, chargePoints, TransactionType.CHARGE, 1000L);
     }
 
@@ -543,13 +546,13 @@ public class PointServiceTest {
         long usePoints = 200L;
         long expectedPoints = currentPoints - usePoints;
 
-        given(userPointTable.selectById(userId))
+        given(mockUserPointTable.selectById(userId))
                 .willReturn(new UserPoint(userId, currentPoints, 1000L));
 
-        given(userPointTable.insertOrUpdate(userId, expectedPoints))
+        given(mockUserPointTable.insertOrUpdate(userId, expectedPoints))
                 .willReturn(new UserPoint(userId, expectedPoints, 1000L));
 
-        given(pointHistoryTable.insert(userId, usePoints, TransactionType.USE, 1000L))
+        given(mockPointHistoryTable.insert(userId, usePoints, TransactionType.USE, 1000L))
                 .willReturn(new PointHistory(1, userId, usePoints, TransactionType.USE, 1000L));
 
         // when
@@ -557,7 +560,7 @@ public class PointServiceTest {
 
         //then
         assertEquals(expectedPoints, userPoint.point());
-        verify(pointHistoryTable, times(1))
+        verify(mockPointHistoryTable, times(1))
                 .insert(userId, usePoints, TransactionType.USE, 1000L);
     }
 }
