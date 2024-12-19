@@ -11,15 +11,19 @@ import java.util.List;
 public class PointController {
 
     private static final Logger log = LoggerFactory.getLogger(PointController.class);
+    private PointService pointService;
+
+    public PointController(PointService pointService) {
+        this.pointService = pointService;
+    }
 
     /**
      * TODO - 특정 유저의 포인트를 조회하는 기능을 작성해주세요.
      */
     @GetMapping("{id}")
-    public UserPoint point(
-            @PathVariable long id
-    ) {
-        return new UserPoint(0, 0, 0);
+    public UserPoint point(@PathVariable long id) {
+        log.info("id = {}" , id);
+        return pointService.getUserPoint(id);
     }
 
     /**
@@ -29,7 +33,8 @@ public class PointController {
     public List<PointHistory> history(
             @PathVariable long id
     ) {
-        return List.of();
+        log.info("id = [{}]", id);
+        return pointService.getUserPointHistory(id);
     }
 
     /**
@@ -40,7 +45,8 @@ public class PointController {
             @PathVariable long id,
             @RequestBody long amount
     ) {
-        return new UserPoint(0, 0, 0);
+        log.info("id = [{}] / amount = [{}]" , id, amount);
+        return pointService.charge(id, amount);
     }
 
     /**
@@ -51,6 +57,7 @@ public class PointController {
             @PathVariable long id,
             @RequestBody long amount
     ) {
-        return new UserPoint(0, 0, 0);
+        log.info("id = [{}] / amount = [{}]" , id, amount);
+        return pointService.use(id, amount);
     }
 }
