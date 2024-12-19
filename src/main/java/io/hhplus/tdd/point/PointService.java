@@ -8,15 +8,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 public class PointService {
 
     private static final Logger log = LoggerFactory.getLogger(PointController.class);
+
     private final UserPointTable userPointTable;
+
     private final PointHistoryTable pointHistoryTable;
+
+    ReentrantLock lock = new ReentrantLock(true);
 
     // 의존성 주입을 위한 생성자 정의
     public PointService(UserPointTable userPointTable, PointHistoryTable pointHistoryTable) {
@@ -34,30 +38,44 @@ public class PointService {
     public UserPoint charge(long userId, long amount) {
         //아이디 검증
         validateUserId(userId);
-        //해당 아이디의 유저 존재 유무 검증 -> 검증 후 존재하는 사용자의 포인트 조회
-        long currentPoints = verifyUserExits(userId).point();
-        //현재 포인트와 충전 포인트를 사용해 포인트 정책 검증
-        long chargePoints = PointValidator.chargeValidate(amount, currentPoints);
-        //포인트 충전
-        UserPoint pointChargeInfo = userPointTable.insertOrUpdate(userId, chargePoints);
-        //포인트를 충전한 유저 히스토리 등록
-        pointHistoryTable.insert(pointChargeInfo.id(), amount, TransactionType.CHARGE, pointChargeInfo.updateMillis());
-        return pointChargeInfo;
+        //락 획득
+        lock.lock();
+        try {
+            //해당 아이디의 유저 존재 유무 검증 -> 검증 후 존재하는 사용자의 포인트 조회
+            long currentPoints = verifyUserExits(userId).point();
+            //현재 포인트와 충전 포인트를 사용해 포인트 정책 검증
+            long chargePoints = PointValidator.chargeValidate(amount, currentPoints);
+            //포인트 충전
+            UserPoint pointChargeInfo = userPointTable.insertOrUpdate(userId, chargePoints);
+            //포인트를 충전한 유저 히스토리 등록
+            pointHistoryTable.insert(pointChargeInfo.id(), amount, TransactionType.CHARGE, pointChargeInfo.updateMillis());
+            return pointChargeInfo;
+        } finally {
+            //락 해제 보장
+            lock.unlock();
+        }
     }
 
     //유저 포인트 사용
     public UserPoint use(long userId, long amount) {
         //아이디 검증
         validateUserId(userId);
-        //해당 아이디의 유저 존재 유무 검증 -> 검증 후 존재하는 사용자의 포인트 조회
-        long currentPoints = verifyUserExits(userId).point();
-        //현재 포인트와 충전 포인트를 사용해 포인트 정책 검증
-        long usePoints = PointValidator.useValidate(amount, currentPoints);
-        //포인트 사용
-        UserPoint pointUseInfo = userPointTable.insertOrUpdate(userId, usePoints);
-        //포인트를 사용한 유저 히스토리 등록
-        pointHistoryTable.insert(pointUseInfo.id(), amount, TransactionType.USE, pointUseInfo.updateMillis());
-        return pointUseInfo;
+        //락 획득
+        lock.lock();
+        try {
+            //해당 아이디의 유저 존재 유무 검증 -> 검증 후 존재하는 사용자의 포인트 조회
+            long currentPoints = verifyUserExits(userId).point();
+            //현재 포인트와 충전 포인트를 사용해 포인트 정책 검증
+            long usePoints = PointValidator.useValidate(amount, currentPoints);
+            //포인트 사용
+            UserPoint pointUseInfo = userPointTable.insertOrUpdate(userId, usePoints);
+            //포인트를 사용한 유저 히스토리 등록
+            pointHistoryTable.insert(pointUseInfo.id(), amount, TransactionType.USE, pointUseInfo.updateMillis());
+            return pointUseInfo;
+        } finally {
+            //락 해제 보장
+            lock.unlock();
+        }
     }
 
     //유저 포인트 히스토리 조회
