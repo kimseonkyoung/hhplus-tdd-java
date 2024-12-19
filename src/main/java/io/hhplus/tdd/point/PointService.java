@@ -16,10 +16,19 @@ public class PointService {
 
     // 포인트 조회 메서드
     public UserPoint getUserPoint(long userId) {
+        validateUserId(userId);
         UserPoint userPoint = userPointTable.selectById(userId);
+        verifyUserExists(userPoint, userId);
+        return userPoint;
+    }
+    private void validateUserId(long userId){
+        if(userId == 0L || userId < 0L){
+            throw new IllegalArgumentException("해당 유저 아이디가 올바르지 않습니다: " + userId);
+        }
+    }
+    private void verifyUserExists(UserPoint userPoint, long userId){
         if(userPoint == null){
             throw new UserNotFoundException("해당 유저를 찾을 수 없습니다: " + userId);
         }
-        return userPoint;
     }
 }
