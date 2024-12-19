@@ -11,7 +11,6 @@ import java.util.List;
 public class PointController {
 
     private static final Logger log = LoggerFactory.getLogger(PointController.class);
-
     private PointService pointService;
 
     public PointController(PointService pointService) {
@@ -34,7 +33,8 @@ public class PointController {
     public List<PointHistory> history(
             @PathVariable long id
     ) {
-        return List.of();
+        log.info("id = [{}]", id);
+        return pointService.getUserPointHistory(id);
     }
 
     /**
@@ -45,7 +45,8 @@ public class PointController {
             @PathVariable long id,
             @RequestBody long amount
     ) {
-        return new UserPoint(0, 0, 0);
+        log.info("id = [{}] / amount = [{}]" , id, amount);
+        return pointService.charge(id, amount);
     }
 
     /**
@@ -56,6 +57,7 @@ public class PointController {
             @PathVariable long id,
             @RequestBody long amount
     ) {
-        return new UserPoint(0, 0, 0);
+        log.info("id = [{}] / amount = [{}]" , id, amount);
+        return pointService.use(id, amount);
     }
 }
